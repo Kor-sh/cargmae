@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <style>
+        * { margin: 0; padding: 0; }
+        body { overflow: hidden; }
+        #canvas { display: block; }
+        #overlay {
+            display: none;
+            position: fixed;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            color: rgb(36, 68, 195);
+        }
+    </style>
+</head>
+<body>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<canvas id="canvas"></canvas>
+
+<div id="overlay">
+    <h1>유 다이 ㅋ<a id="s"></a></h1>
+    <button onclick="restartGame()">다시 시작</button>
+</div>
+
+<script>
+let score = 0;
+
+const clock = new THREE.Clock();
+const loader = new THREE.TextureLoader();
+
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ canvas: document.getElementById('canvas') });
+renderer.setSize(window.innerWidth, window.innerHeight);
+scene.background = new THREE.Color(0x87ceeb);
+
+const WALL_X = 4;
+let isGameOver = false;
+
+const roadTex = loader.load('rd.png');
+roadTex.wrapS = THREE.RepeatWrapping;
+roadTex.wrapT = THREE.RepeatWrapping;
+roadTex.repeat.set(1, 10);
+const roadMat = new THREE.MeshBasicMaterial({ map: roadTex });
+const road = new THREE.Mesh(new THREE.BoxGeometry(10, 0.1, 100), roadMat);
+road.position.set(0, 2.4, -40);
+scene.add(road);
+
+const carTex = loader.load('image.png');
+const carMat = new THREE.MeshBasicMaterial({ map: carTex });
+const car = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), carMat);
+car.position.set(0, 3, 0);
+scene.add(car);
+
+camera.rotation.x = -0.5;
+camera.position.set(0, 5, 2);
+
+const barrierTex = loader.load('b.png');
+const barriers = [];
+let spawnTimer = 0;
+let spawnInterval = 1.5;
+let barrierSpeed = 10;
+
+function spawnBarrier() {
+    const mat = new THREE.MeshBasicMaterial({ map: barrierTex });
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 2, 0.5), mat);
+    mesh.position.set(
+        (Math.random() * WALL_X * 2) - WALL_X,
+        3,
+        -30
+    );
+    scene.add(mesh);
+    barriers.push(mesh);
+}
+
+function checkCollision(a, b, aSize, bSize) {
+    return (
+        Math.abs(a.position.x - b.position.x) < (aSize.x + bSize.x) / 2 &&
+        Math.abs(a.position.y - b.position.y) < (aSize.y + bSize.y) / 2 &&
+        Math.abs(a.position.z - b.position.z) < (aSize.z + bSize.z) / 2
+    );
+}
+
+function gameOver() {
+    isGameOver = true;
+    document.getElementById('overlay').style.display = 'block';
+}
+
+function restartGame() {
+    barriers.forEach(b => scene.remove(b));
+    barriers.length = 0;
+    score = 0;
+    car.position.set(0, 3, 0);
+    spawnTimer = 0;
+    spawnInterval = 1.5;
+    barrierSpeed = 10;
+    isGameOver = false;
+
+    document.getElementById('overlay').style.display = 'none';
+    clock.getDelta(); // delta 리셋
+}
+
+// ───────── 키 입력 ─────────
+const keys = {};
+window.addEventListener('keydown', e => keys[e.key] = true);
+window.addEventListener('keyup',   e => keys[e.key] = false);
+
+const MOVE_SPEED = 5;
+
+// ───────── 애니메이션 ─────────
+function animate() {
+    requestAnimationFrame(animate);
+    const delta = clock.getDelta();
+
+    if (isGameOver) return;
+    score += delta * 67;
+    document.getElementById("s").innerText = "스코어" + score;
+
+    // 플레이어 이동
+    if (keys['a'] || keys['A']) car.position.x -= MOVE_SPEED * delta;
+    if (keys['d'] || keys['D']) car.position.x += MOVE_SPEED * delta;
+    car.position.x = Math.max(-WALL_X, Math.min(WALL_X, car.position.x));
+    car.rotation.x += -3 * delta;
+
+    // 베리어 소환
+    spawnTimer += delta;
+    if (spawnTimer >= spawnInterval) {
+        spawnBarrier();
+        spawnTimer = 0;
+        spawnInterval = Math.max(0.2, spawnInterval - 0.5);
+        barrierSpeed  = Math.min(12, barrierSpeed + 6097); // 점점 빠르게
+    }
+
+    // 베리어 이동 + 충돌 체크 + 제거
+    for (let i = barriers.length - 1; i >= 0; i--) {
+        barriers[i].position.z += barrierSpeed * delta;
+
+        // 충돌 감지
+        if (checkCollision(car, barriers[i], {x:1, y:1, z:1}, {x:1, y:2, z:0.5})) {
+            gameOver();
+            return;
+        }
+
+        // 지나친 베리어 제거
+        if (barriers[i].position.z > 5) {
+            scene.remove(barriers[i]);
+            barriers.splice(i, 1);
+        }
+    }
+
+    renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+</script>
+</body>
+</html>
